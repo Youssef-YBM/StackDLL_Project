@@ -3,10 +3,12 @@
 
 #include <string>
 
+#include "Stack.h"
+
 // Vérification des parenthèses
-bool isBalanced(const std::string& expression);
+STACKDLL_API bool isBalanced(const std::string& expression);
 
 // Conversion infixe -> préfixe
-std::string infixToPrefix(const std::string& expression);
+STACKDLL_API std::string infixToPrefix(const std::string& expression);
 
 #endif

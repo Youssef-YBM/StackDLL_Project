@@ -4,11 +4,25 @@
 #include <stdexcept>
 
 // =====================================================
+// Macro d'export/import pour la DLL (MSVC)
+// =====================================================
+
+#if defined(_WIN32) && defined(STACKDLL_SHARED)
+    #ifdef STACKDLL_EXPORTS
+        #define STACKDLL_API __declspec(dllexport)
+    #else
+        #define STACKDLL_API __declspec(dllimport)
+    #endif
+#else
+    #define STACKDLL_API
+#endif
+
+// =====================================================
 // Pile générique basée sur un tableau dynamique
 // =====================================================
 
 template <typename T>
-class DynamicStack
+class STACKDLL_API DynamicStack
 {
 private:
     T* data;
@@ -35,7 +49,7 @@ public:
 // =====================================================
 
 template <typename T>
-class LinkedStack
+class STACKDLL_API LinkedStack
 {
 private:
     struct Node
