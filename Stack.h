@@ -83,10 +83,12 @@ public:
 // Instanciations utilisées par la DLL
 // =====================================================
 
+#ifndef STACKDLL_EXPORTS
 extern template class DynamicStack<char>;
 extern template class DynamicStack<int>;
 
 extern template class LinkedStack<char>;
 extern template class LinkedStack<int>;
+#endif
 
 #endif
