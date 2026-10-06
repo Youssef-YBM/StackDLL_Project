@@ -4,152 +4,91 @@
 \usepackage[T1]{fontenc}
 \usepackage[french]{babel}
 \usepackage[margin=2.5cm]{geometry}
-\usepackage{graphicx}
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{hyperref}
-\usepackage{amsmath}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning}
 \usepackage{enumitem}
 \usepackage{fancyhdr}
 \usepackage{titlesec}
 
-\definecolor{codebg}{rgb}{0.96,0.96,0.96}
-\definecolor{codekw}{rgb}{0.0,0.0,0.6}
-\definecolor{codecomment}{rgb}{0.25,0.5,0.25}
-\definecolor{codestring}{rgb}{0.6,0.0,0.0}
+% ---------------------------------------------------------
+% Palette : un seul bleu, utilisé partout (titres, mots-clés, encadrés)
+% ---------------------------------------------------------
+\definecolor{bleu}{RGB}{21,67,140}
+\definecolor{bleuclair}{RGB}{235,242,250}
+\definecolor{grisligne}{RGB}{200,200,200}
+
+\colorlet{codebg}{bleuclair}
 
 \lstdefinestyle{cppstyle}{
     backgroundcolor=\color{codebg},
-    commentstyle=\color{codecomment},
-    keywordstyle=\color{codekw}\bfseries,
-    stringstyle=\color{codestring},
+    commentstyle=\color{bleu!60!black}\itshape,
+    keywordstyle=\color{bleu}\bfseries,
+    stringstyle=\color{black},
     basicstyle=\ttfamily\footnotesize,
     breaklines=true,
     frame=single,
+    rulecolor=\color{grisligne},
     numbers=left,
-    numberstyle=\tiny,
+    numberstyle=\tiny\color{bleu!50!black},
     tabsize=4,
     language=C++
 }
 \lstset{style=cppstyle}
 
+\hypersetup{colorlinks=true, linkcolor=bleu, urlcolor=bleu, citecolor=bleu}
+
+% En-tête simple : juste le nom, pas de page de garde
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{Rapport TP1 -- Pile générique et DLL C++}
-\fancyhead[R]{ERRAMI Youssef}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{bleu}\leaders\hrule height \headrulewidth\hfill}}
+\fancyhead[L]{\color{bleu}\textbf{ERRAMI Youssef}}
+\fancyhead[R]{\color{bleu}TP1 -- Pile générique et DLL C++}
 \fancyfoot[C]{\thepage}
 
-\titleformat{\section}{\normalfont\Large\bfseries}{\thesection}{1em}{}
-\titleformat{\subsection}{\normalfont\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\section}{\normalfont\Large\bfseries\color{bleu}}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries\color{bleu}}{\thesubsection}{1em}{}
 
-\title{
-    \vspace{-2cm}
-    \textbf{Compilation, Édition de Liens et Génération d'une Bibliothèque Dynamique (DLL) en C++} \\
-    \large Étude de cas : Projet \texttt{StackDLL\_Project}
-}
-\author{ERRAMI Youssef \\ \small ILISI 2 -- C++ Avancé et Virtualisation -- TP1}
-\date{\today}
+\newcommand{\point}[1]{\textbf{\color{bleu}#1}}
 
 \begin{document}
 
-\maketitle
+{\LARGE\bfseries\color{bleu} Compilation, édition de liens et DLL : ce qu'on a fait dans ce TP}
 
-\begin{abstract}
+\vspace{0.3cm}
+\noindent ERRAMI Youssef --- ILISI 2, C++ Avancé et Virtualisation, TP1 \hfill \today
+
+\vspace{0.1cm}
+{\color{grisligne}\hrule height 1pt}
+\vspace{0.6cm}
+
 \noindent
-Ce rapport présente, dans une optique de révision personnelle et de préparation à un contrôle oral, l'ensemble de la chaîne de production d'un programme C++ structuré autour d'une pile générique (\texttt{DynamicStack} et \texttt{LinkedStack}), depuis le code source jusqu'à la génération d'une bibliothèque dynamique (DLL) sous Windows. On y détaille le rôle de chaque fichier intermédiaire produit par la chaîne de compilation (\texttt{.obj}, \texttt{.exp}, \texttt{.lib}, \texttt{.dll}, \texttt{.exe}), la distinction entre édition de liens statique et dynamique, le mécanisme des macros d'export/import, ainsi que la question de la lisibilité et de la ``rétro-traduction'' du code assembleur généré par le compilateur. Le rapport se conclut par une série de questions-réponses destinées à tester la compréhension des concepts abordés.
-\end{abstract}
+Ce document reprend ce qu'on a réellement manipulé pendant le TP1 : le projet \texttt{StackDLL\_Project} (deux piles génériques, \texttt{DynamicStack} et \texttt{LinkedStack}, plus les fonctions \texttt{isBalanced} et \texttt{infixToPrefix}), transformé en bibliothèque dynamique \texttt{StackDLL.dll}. L'idée n'est pas de refaire un cours théorique sur les DLL, mais de partir de nos propres commandes, de nos propres fichiers générés, et même de nos propres erreurs, pour être capable de les expliquer à l'oral.
 
-\tableofcontents
+\section{Les quatre étapes, concrètement}
 
-% =====================================================
-\section{Introduction}
-% =====================================================
+Quand on tape une commande de compilation, il se passe en réalité quatre choses, pas une seule. Pour notre fichier \texttt{Stack.cpp} :
 
-Un programme écrit en C++ ne devient un exécutable fonctionnel qu'au terme d'une chaîne de transformations successives : prétraitement, compilation, assemblage, puis édition de liens. Dans le cadre du TP1, le projet \texttt{StackDLL\_Project} implémente deux structures de pile générique (par tableau dynamique et par liste chaînée), des fonctions de traitement d'expressions (\texttt{isBalanced}, \texttt{infixToPrefix}), et a pour objectif final d'être empaqueté sous la forme d'une \textbf{bibliothèque dynamique} (DLL), consommée par un exécutable client (\texttt{main.exe}).
-
-Ce document reprend, étape par étape, les notions manipulées lors de ce TP, afin de pouvoir justifier chaque choix technique devant un enseignant ou un jury.
-
-% =====================================================
-\section{Rappel : les quatre étapes de la compilation C++}
-% =====================================================
-
-Avant d'aborder la DLL elle-même, il est indispensable de comprendre que le terme ``compiler'' est un raccourci qui recouvre en réalité quatre étapes distinctes, chacune produisant un fichier intermédiaire différent.
-
-\begin{enumerate}[label=\textbf{\arabic*.}]
-    \item \textbf{Prétraitement (preprocessing)} : le préprocesseur traite les directives commençant par \texttt{\#} (\texttt{\#include}, \texttt{\#define}, \texttt{\#ifdef}, etc.). Il produit un fichier source ``traduction unit'' entièrement expansé, sans aucune directive restante. Sous MSVC, on l'obtient avec \texttt{cl /P Stack.cpp} (fichier \texttt{.i}).
-
-    \item \textbf{Compilation (analyse et génération de code assembleur)} : le compilateur à proprement parler (\texttt{cc1plus} chez GCC, \texttt{c2.dll} chez MSVC) transforme le C++ prétraité en \textbf{code assembleur} pour l'architecture cible (ici x86-64). On obtient ce fichier avec \texttt{g++ -S Stack.cpp} (fichier \texttt{.s}) ou \texttt{cl /FA Stack.cpp} (fichier \texttt{.asm}).
-
-    \item \textbf{Assemblage} : l'assembleur (\texttt{as.exe} pour GCC/MinGW, intégré à \texttt{cl.exe} pour MSVC) traduit le texte assembleur en \textbf{code machine binaire}, encapsulé dans un format objet (COFF sous Windows, ELF sous Linux). C'est le fichier \texttt{.obj} (Windows) ou \texttt{.o} (Linux). \textbf{Ce fichier n'est pas encore exécutable} : il contient des symboles non résolus (appels de fonctions définies dans d'autres fichiers ou bibliothèques).
-
-    \item \textbf{Édition de liens (linking)} : l'éditeur de liens (\texttt{link.exe} chez MSVC, \texttt{ld} chez GCC) rassemble plusieurs fichiers \texttt{.obj}, résout les références croisées entre eux, et y ajoute le nécessaire pour produire soit un exécutable (\texttt{.exe}), soit une bibliothèque (\texttt{.dll} ou \texttt{.so}).
+\begin{enumerate}[label=\point{\arabic*.}]
+    \item \point{Prétraitement.} Le préprocesseur remplace les \texttt{\#include "Stack.h"}, les \texttt{\#define}, les \texttt{\#ifdef STACKDLL\_EXPORTS} etc. par leur contenu réel. Résultat : un seul gros fichier texte, sans aucune directive \texttt{\#} restante.
+    \item \point{Compilation.} Le compilateur transforme ce texte C++ en \textbf{assembleur} x86-64. C'est l'étape où les classes, les templates, les boucles \texttt{for}/\texttt{while} disparaissent au profit d'instructions machine (\texttt{mov}, \texttt{cmp}, \texttt{jmp}, \texttt{call}...).
+    \item \point{Assemblage.} Le texte assembleur est traduit en code binaire réel, rangé dans un fichier \texttt{.obj} (format COFF sous Windows). C'est à cette étape précise qu'on a eu notre premier vrai problème du TP (voir section~\ref{sec:deviceguard}) : l'assembleur de MinGW (\texttt{as.exe}) était bloqué par une politique système, donc \texttt{g++} compilait le texte mais échouait silencieusement à produire le \texttt{.obj}.
+    \item \point{Édition de liens.} \texttt{link.exe} (MSVC) ou \texttt{ld} (GCC) assemble les \texttt{.obj} entre eux, résout les appels de fonctions d'un fichier vers l'autre, et produit soit un \texttt{.exe}, soit, dans notre cas, une \texttt{.dll}.
 \end{enumerate}
 
-\begin{center}
-\begin{tikzpicture}[node distance=1.6cm, every node/.style={font=\small}]
-    \node (src) [draw, rectangle, rounded corners, fill=codebg, minimum width=2.8cm] {\texttt{Stack.cpp}};
-    \node (pp) [draw, rectangle, rounded corners, fill=codebg, right=2.2cm of src, minimum width=2.8cm] {\texttt{Stack.i}};
-    \node (asm) [draw, rectangle, rounded corners, fill=codebg, right=2.2cm of pp, minimum width=2.8cm] {\texttt{Stack.asm}};
-    \node (obj) [draw, rectangle, rounded corners, fill=codebg, below=1.4cm of asm, minimum width=2.8cm] {\texttt{Stack.obj}};
-    \node (dll) [draw, rectangle, rounded corners, fill=yellow!20, below=1.4cm of pp, minimum width=2.8cm] {\texttt{StackDLL.dll}};
+\section{Pourquoi une DLL, et comment on l'a obtenue}
 
-    \draw[-{Latex}] (src) -- node[above]{\scriptsize prétraitement} (pp);
-    \draw[-{Latex}] (pp) -- node[above]{\scriptsize compilation} (asm);
-    \draw[-{Latex}] (asm) -- node[right]{\scriptsize assemblage} (obj);
-    \draw[-{Latex}] (obj) -- node[above]{\scriptsize édition de liens} (dll);
-\end{tikzpicture}
-\end{center}
+Une DLL, c'est juste un fichier binaire qui contient du code compilé, mais qui n'est \textbf{pas collé} dans l'exécutable final : il est chargé en mémoire au lancement du programme qui en a besoin. La différence avec une bibliothèque statique (\texttt{.lib}/\texttt{.a} classique) tient en une phrase : la statique est copiée dans l'\texttt{.exe} à la compilation, la dynamique reste un fichier séparé, chargé au démarrage.
 
-% =====================================================
-\section{Qu'est-ce qu'une DLL ?}
-% =====================================================
+Dans notre projet, on voulait que \texttt{main.cpp} (le programme de test) utilise les piles sans que leur code soit recopié dans \texttt{main.exe}. On a donc :
 
-\subsection{Définition}
+\begin{enumerate}[label=\point{\arabic*.}]
+\item compilé \texttt{Stack.cpp} et \texttt{Expression.cpp} en DLL,
+\item compilé \texttt{main.cpp} séparément, en lui disant simplement \og ces fonctions existent, tu les trouveras dans la DLL \fg.
+\end{enumerate}
 
-Une \textbf{DLL} (\textit{Dynamic-Link Library}, bibliothèque à liaison dynamique) est un fichier binaire contenant du code et des données (fonctions, classes, variables) qui peuvent être \textbf{chargés et utilisés par plusieurs programmes différents}, \textbf{au moment de l'exécution}, plutôt que d'être copiés dans chaque exécutable au moment de la compilation. L'équivalent sous Linux/macOS est la bibliothèque partagée (\texttt{.so} / \texttt{.dylib}).
-
-\subsection{DLL vs bibliothèque statique}
-
-\begin{center}
-\begin{tabular}{|l|l|l|}
-\hline
-\textbf{Critère} & \textbf{Bibliothèque statique (\texttt{.lib}/\texttt{.a})} & \textbf{Bibliothèque dynamique (\texttt{.dll}/\texttt{.so})} \\
-\hline
-Moment de l'intégration & À la compilation (édition de liens) & À l'exécution (chargement) \\
-\hline
-Taille de l'exécutable & Plus grande (code copié dedans) & Plus petite (code externe) \\
-\hline
-Partage entre programmes & Non (chaque exe a sa copie) & Oui (un seul fichier en mémoire) \\
-\hline
-Mise à jour & Nécessite de recompiler le client & Remplacer le \texttt{.dll} suffit \\
-\hline
-Dépendance au déploiement & Aucune (tout est dans l'\texttt{.exe}) & Le \texttt{.dll} doit être présent \\
-\hline
-\end{tabular}
-\end{center}
-
-\subsection{Pourquoi utiliser une DLL dans ce TP ?}
-
-L'objectif pédagogique est de séparer la \textbf{bibliothèque de structures de données} (les piles génériques et les fonctions sur les expressions) de son \textbf{utilisation} (le programme \texttt{main.cpp}), de manière à illustrer :
-\begin{itemize}
-    \item la notion d'interface publique exportée (quelles fonctions/classes sont visibles depuis l'extérieur) ;
-    \item le mécanisme d'édition de liens différé (le client ne connaît la DLL qu'au travers d'une bibliothèque d'importation) ;
-    \item la possibilité de faire évoluer l'implémentation (\texttt{Stack.cpp}) sans recompiler le client, tant que l'interface (\texttt{Stack.h}) ne change pas.
-\end{itemize}
-
-% =====================================================
-\section{Les macros d'export et d'import}
-% =====================================================
-
-Sous Windows, le compilateur a besoin de savoir, pour chaque symbole (classe, fonction), s'il doit :
-\begin{itemize}
-    \item \textbf{l'exporter} (le rendre visible depuis l'extérieur de la DLL) $\rightarrow$ \texttt{\_\_declspec(dllexport)} ;
-    \item \textbf{l'importer} (dire au compilateur qu'il est défini ailleurs, dans une DLL) $\rightarrow$ \texttt{\_\_declspec(dllimport)}.
-\end{itemize}
-
-Le projet utilise une macro conditionnelle classique, définie dans \texttt{Stack.h} :
+Pour que le même fichier \texttt{Stack.h} fonctionne dans les deux cas (une fois pour fabriquer la DLL, une fois pour l'utiliser), on a ajouté une macro conditionnelle au début de \texttt{Stack.h} :
 
 \begin{lstlisting}[language=C++]
 #if defined(_WIN32) && defined(STACKDLL_SHARED)
@@ -163,204 +102,152 @@ Le projet utilise une macro conditionnelle classique, définie dans \texttt{Stac
 #endif
 \end{lstlisting}
 
-\textbf{Logique :}
+Concrètement : quand on compile \texttt{Stack.cpp} \textbf{pour fabriquer la DLL}, on passe \texttt{/D STACKDLL\_EXPORTS} sur la ligne de commande $\rightarrow$ \texttt{STACKDLL\_API} devient \texttt{dllexport} (``j'expose cette classe vers l'extérieur''). Quand on compile \texttt{main.cpp} \textbf{pour l'utiliser}, on ne définit pas \texttt{STACKDLL\_EXPORTS} $\rightarrow$ \texttt{STACKDLL\_API} devient \texttt{dllimport} (``cette classe, je ne la définis pas ici, je la récupère d'ailleurs''). Même fichier, deux comportements selon qui le compile.
+
+\section{Les fichiers qu'on a vus apparaître dans le dossier}
+
+Après avoir lancé :
+\begin{lstlisting}[language=bash]
+cl /LD /EHsc /std:c++17 /D STACKDLL_SHARED /D STACKDLL_EXPORTS Stack.cpp Expression.cpp /Fe:StackDLL.dll
+\end{lstlisting}
+trois fichiers sont sortis, pas un seul. Un \texttt{dir} donne exactement :
+\begin{lstlisting}
+28-Sep-26  03:16 PM           139,776 StackDLL.dll
+28-Sep-26  03:16 PM            12,904 StackDLL.lib
+\end{lstlisting}
+(et \texttt{main.exe}, 285~696 octets, est sorti ensuite de la commande liant \texttt{main.cpp} à \texttt{StackDLL.lib}.) Que fait chacun ?
+
 \begin{itemize}
-    \item Lorsqu'on compile \texttt{Stack.cpp} \textit{pour produire la DLL}, on définit \texttt{STACKDLL\_EXPORTS} $\Rightarrow$ \texttt{STACKDLL\_API} devient \texttt{dllexport}.
-    \item Lorsqu'on compile \texttt{main.cpp} \textit{pour produire le client}, \texttt{STACKDLL\_EXPORTS} n'est \textbf{pas} défini (mais \texttt{STACKDLL\_SHARED} l'est) $\Rightarrow$ \texttt{STACKDLL\_API} devient \texttt{dllimport}.
+\item \point{\texttt{Stack.obj} et \texttt{Expression.obj}} (invisibles ici, effacés après le link) : un par fichier \texttt{.cpp}, contenant le code machine de ce fichier \textbf{et} la liste des symboles qu'il réclame ailleurs (par exemple, \texttt{Expression.obj} réclame les fonctions de \texttt{LinkedStack<char>} définies dans \texttt{Stack.obj}). Ce ne sont que des morceaux, rien n'est exécutable encore.
+
+\item \point{\texttt{StackDLL.dll}} : le binaire final, chargeable par Windows. Il contient tout le code machine, \textbf{plus} une table d'export (qui dit \og voici les noms de fonctions que j'offre, et à quelle adresse ils se trouvent dans mon fichier \fg).
+
+\item \point{\texttt{StackDLL.lib}} : c'est le piège classique. Ce \texttt{.lib} ne contient \textbf{aucun code machine}. C'est juste une table qui fait correspondre un nom de fonction à \og va la chercher dans StackDLL.dll au démarrage \fg. Il ne sert qu'à \texttt{link.exe} quand on compile \texttt{main.cpp} ; il ne sert à rien à l'exécution, et il ne faut surtout pas le confondre avec un \texttt{.lib} statique \og normal \fg{} (qui, lui, contient vraiment le code).
+
+\item \point{\texttt{StackDLL.exp}} : un fichier intermédiaire produit par \texttt{link.exe} \textbf{pendant} la fabrication de la DLL, utilisé pour construire en même temps la table d'export de la DLL et le \texttt{.lib} d'import. On ne le garde pas, on ne le redistribue jamais : il ne ressert à rien une fois la DLL et le \texttt{.lib} obtenus.
+
+\item \point{\texttt{main.exe}} : contient le code de \texttt{main.cpp}, mais \textbf{pas} celui des piles. Sans \texttt{StackDLL.dll} dans le même dossier, il refuse de démarrer.
 \end{itemize}
 
-C'est exactement le même header (\texttt{Stack.h}) qui, selon le contexte de compilation, génère deux comportements différents : \textbf{un seul fichier source, deux interprétations}.
+\subsection{Vérifier ce qu'exporte vraiment la DLL}
 
-% =====================================================
-\section{Les fichiers générés : rôle de chacun}
-% =====================================================
-
-La commande de construction de la DLL utilisée dans ce TP est :
-
-\begin{lstlisting}[language=bash]
-cl /LD /EHsc /std:c++17 /D STACKDLL_SHARED /D STACKDLL_EXPORTS ^
-   Stack.cpp Expression.cpp /Fe:StackDLL.dll
-\end{lstlisting}
-
-Elle produit \textbf{trois fichiers}, et pas un seul :
-
-\subsection{\texttt{Stack.obj} et \texttt{Expression.obj} (fichiers objets)}
-
-Fichiers binaires intermédiaires, un par unité de compilation (\texttt{.cpp}), contenant :
-\begin{itemize}
-    \item le code machine des fonctions définies dans ce fichier ;
-    \item une table de symboles exportés (fonctions que ce fichier offre aux autres) ;
-    \item une table de symboles importés/non résolus (fonctions utilisées mais définies ailleurs, par exemple dans la bibliothèque standard C++).
-\end{itemize}
-Ce ne sont que des ``briques'' : ils ne sont pas exécutables seuls.
-
-\subsection{\texttt{StackDLL.dll} (la bibliothèque dynamique)}
-
-Le résultat final de l'édition de liens : un binaire chargeable en mémoire, au format \textbf{PE} (\textit{Portable Executable}), contenant le code machine de toutes les fonctions, plus une \textbf{table d'exports} (section \texttt{.edata}) qui liste les symboles accessibles depuis l'extérieur, avec leur adresse relative (RVA).
-
-\subsection{\texttt{StackDLL.lib} (la bibliothèque d'importation, \textit{import library})}
-
-\textbf{Point souvent mal compris} : ce \texttt{.lib} n'est \textbf{pas} une bibliothèque statique classique contenant du code machine complet. C'est une \textbf{table de correspondance} entre les noms de symboles exportés par la DLL et des ``stubs'' permettant à l'éditeur de liens du programme client de générer, dans l'exécutable, les instructions nécessaires pour appeler dynamiquement la bonne fonction dans \texttt{StackDLL.dll} au chargement. En résumé : le \texttt{.lib} d'importation sert uniquement \textbf{à l'édition de liens du client}, pas à l'exécution.
-
-\subsection{\texttt{StackDLL.exp} (fichier d'exportation)}
-
-Fichier intermédiaire généré par \texttt{link.exe} \textbf{pendant} la construction de la DLL, qui contient les informations d'export nécessaires pour construire à la fois la table d'export de la DLL \textbf{et} le \texttt{.lib} d'importation correspondant. Il n'est utile qu'au moment de la construction ; on ne le redistribue jamais avec le programme final.
-
-\subsection{\texttt{main.exe} (l'exécutable client)}
-
-Compilé avec :
-\begin{lstlisting}[language=bash]
-cl /EHsc /std:c++17 /D STACKDLL_SHARED main.cpp /Fe:main.exe /link StackDLL.lib
-\end{lstlisting}
-Il contient le code de \texttt{main.cpp}, et des références non résolues vers les symboles de \texttt{StackDLL.dll}, complétées grâce à \texttt{StackDLL.lib}. \textbf{\texttt{main.exe} ne contient pas le code des piles} : il faut que \texttt{StackDLL.dll} soit physiquement présent (même dossier ou \texttt{PATH}) pour que le programme démarre.
-
-\subsection{Tableau de synthèse}
-
-\begin{center}
-\begin{tabular}{|l|l|l|}
-\hline
-\textbf{Fichier} & \textbf{Produit par} & \textbf{Rôle} \\
-\hline
-\texttt{.obj} & Compilateur (assemblage) & Code machine + symboles, par fichier source \\
-\hline
-\texttt{.exp} & Éditeur de liens (étape DLL) & Table d'export temporaire de construction \\
-\hline
-\texttt{.lib} & Éditeur de liens (étape DLL) & Table d'import pour lier un client à la DLL \\
-\hline
-\texttt{.dll} & Éditeur de liens (étape DLL) & Bibliothèque chargée dynamiquement \\
-\hline
-\texttt{.exe} & Éditeur de liens (étape client) & Programme exécutable final \\
-\hline
-\end{tabular}
-\end{center}
-
-% =====================================================
-\section{Vérification de la DLL : la table d'export}
-% =====================================================
-
-On peut inspecter le contenu exporté d'une DLL avec l'outil \texttt{dumpbin} (fourni avec MSVC) :
-
-\begin{lstlisting}[language=bash]
-dumpbin /exports StackDLL.dll
-\end{lstlisting}
-
-Extrait obtenu sur le projet (38 symboles exportés) :
-
+Avec \texttt{dumpbin /exports StackDLL.dll}, on a vu apparaître exactement 38 symboles. Un extrait réel :
 \begin{lstlisting}
 ordinal hint RVA      name
       1    0 00001000 ??0?$DynamicStack@D@@QEAA@H@Z
-      2    1 00001070 ??0?$DynamicStack@H@@QEAA@H@Z
-     ...
-     15    E 00001D70 ?infixToPrefix@@YA?AV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@AEBV12@@Z
-     16    F 00001C80 ?isBalanced@@YA_NAEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@std@@@Z
+     15    E 00001D70 ?infixToPrefix@@YA?AV?$basic_string@D...@std@@AEBV12@@Z
+     16    F 00001C80 ?isBalanced@@YA_NAEBV?$basic_string@D...@std@@@Z
+     25   18 00001700 ?push@?$DynamicStack@D@@QEAAXAEBD@Z
 \end{lstlisting}
+Ces noms illisibles ne sont pas un bug : c'est le \point{name mangling}. En C++, deux fonctions \texttt{push} (une pour \texttt{DynamicStack<char>}, une pour \texttt{DynamicStack<int>}) doivent avoir des noms binaires \textbf{différents}, sinon l'éditeur de liens ne pourrait pas les distinguer. Le compilateur encode donc dans le nom la classe, le type du template et les paramètres.
 
-\noindent Ces noms étranges (\texttt{??0?\$DynamicStack@D@@QEAA@H@Z}) sont le résultat du \textbf{name mangling} (décoration de noms) : le compilateur C++ encode dans le nom du symbole le type de la classe, les paramètres et le type de retour, pour permettre la \textbf{surcharge de fonctions} (deux fonctions \texttt{push} différentes selon le type \texttt{T} doivent avoir des noms distincts au niveau binaire, puisque l'éditeur de liens ne connaît que des noms, pas des signatures C++).
+\section{Lire l'assembleur généré : on l'a vraiment fait}
 
-% =====================================================
-\section{Peut-on lire (et \og retraduire \fg) le fichier assembleur ?}
-% =====================================================
+On a demandé au compilateur de s'arrêter juste après l'étape de compilation, sans assembler, avec :
+\begin{lstlisting}[language=bash]
+cl /c /FAs /Fa /EHsc /std:c++17 /D STACKDLL_SHARED /D STACKDLL_EXPORTS Stack.cpp
+\end{lstlisting}
+Ça donne un vrai fichier \texttt{Stack.asm}, pas un exemple inventé. Voici exactement ce qu'on y trouve pour \texttt{DynamicStack<int>::isEmpty()} (celle qui, dans \texttt{Stack.cpp}, fait juste \texttt{return topIndex == -1;}) :
 
-\subsection{Obtenir le fichier assembleur}
-
-Oui, il est tout à fait possible de demander au compilateur de s'arrêter après l'étape de compilation et de produire le fichier assembleur, sans aller jusqu'à l'assemblage :
-
-\begin{itemize}
-    \item GCC/MinGW : \texttt{g++ -S Stack.cpp -o Stack.s}
-    \item MSVC : \texttt{cl /FA /c Stack.cpp} (produit \texttt{Stack.asm})
-\end{itemize}
-
-Ce fichier est un texte lisible par un humain, contenant des instructions comme :
 \begin{lstlisting}
-push    rax
-mov     ecx, DWORD PTR [rdi]
-call    ?resize@?$DynamicStack@H@@AEAAXXZ
+; 83   :     return topIndex == -1;
+
+	mov	rax, QWORD PTR this$[rsp]
+	cmp	DWORD PTR [rax+12], -1
+	jne	SHORT $LN3@isEmpty
+	mov	DWORD PTR tv66[rsp], 1
+	jmp	SHORT $LN4@isEmpty
+$LN3@isEmpty:
+	mov	DWORD PTR tv66[rsp], 0
+$LN4@isEmpty:
+	movzx	eax, BYTE PTR tv66[rsp]
 \end{lstlisting}
 
-\subsection{Peut-on le relire et comprendre le programme ?}
+En le lisant ligne par ligne : \texttt{rax} reçoit l'adresse de l'objet (\texttt{this}), \texttt{[rax+12]} va chercher \texttt{topIndex} directement en mémoire (à 12 octets du début de l'objet), on le compare à \texttt{-1}, et selon le résultat on met \texttt{1} ou \texttt{0} dans une case temporaire avant de la renvoyer. \textbf{On reconnaît tout à fait le \texttt{if}/\texttt{else} du code source}, simplement écrit avec des sauts (\texttt{jne}, \texttt{jmp}) plutôt qu'avec des mots-clés.
 
-\textbf{Oui, partiellement.} Un lecteur expérimenté peut suivre la logique (sauts conditionnels, boucles, appels de fonctions, accès mémoire) et reconstituer un algorithme général. C'est exactement le principe de la \textbf{rétro-ingénierie} (\textit{reverse engineering}).
+Autre extrait, pour \texttt{push()} (qui, en C++, teste \texttt{if (topIndex + 1 >= capacity) resize();}) :
+\begin{lstlisting}
+; 47   :     if (topIndex + 1 >= capacity)
 
-\textbf{Mais la retraduction en code source d'origine est impossible à l'identique}, pour plusieurs raisons :
+	mov	rax, QWORD PTR this$[rsp]
+	mov	eax, DWORD PTR [rax+12]
+	inc	eax
+	mov	rcx, QWORD PTR this$[rsp]
+	cmp	eax, DWORD PTR [rcx+8]
+	jl	SHORT $LN2@push
+
+; 49   :         resize();
+
+	mov	rcx, QWORD PTR this$[rsp]
+	call	?resize@?$DynamicStack@H@@AEAAXXZ
+$LN2@push:
+\end{lstlisting}
+On voit même l'appel à \texttt{resize()} sous la forme \texttt{call ?resize@?\$DynamicStack@H@@AEAAXXZ} -- le nom mangled qu'on a vu plus haut dans la table d'export.
+
+\subsection{Est-ce qu'on peut \og retraduire \fg{} ça en \texttt{Stack.cpp} ?}
+
+Partiellement, oui, et c'est exactement ce qu'on vient de faire à la main ci-dessus pour deux petites fonctions. Mais il faut être honnête sur les limites :
+
 \begin{itemize}
-    \item \textbf{Perte des noms symboliques} : les noms de variables locales, les commentaires, et parfois même les noms de paramètres n'existent plus dans le binaire -- seules les adresses mémoire ou les registres subsistent.
-    \item \textbf{Perte des abstractions de haut niveau} : les classes, l'héritage, les templates sont \og compilés \fg{} (monomorphisés pour les templates, aplatis en tables de fonctions virtuelles pour le polymorphisme) ; l'assembleur ne voit que des adresses et des sauts, pas des \og objets \fg.
-    \item \textbf{Optimisations du compilateur} : le compilateur peut réordonner, fusionner, dérouler des boucles, supprimer du code mort -- le flot d'instructions ne correspond plus ligne à ligne au code source.
-    \item \textbf{Ambiguïté structurelle} : plusieurs programmes sources différents peuvent produire un assembleur identique ou très similaire (par exemple \texttt{for} et \texttt{while} équivalents) -- il n'y a donc pas de retraduction \textbf{unique}.
+\item \point{Les noms disparaissent.} \texttt{tv66}, \texttt{\$LN3@isEmpty} sont inventés par le compilateur. Le vrai nom de variable (\texttt{topIndex}) n'existe plus en tant que texte : on sait juste que c'est \og ce qui est à l'offset 12 dans l'objet \fg. Pour le retrouver, Microsoft nous a aidés en laissant les commentaires \texttt{; 83 : return topIndex == -1;} dans le listing -- mais ça, c'est uniquement parce qu'on a demandé un fichier \texttt{.asm} \textbf{avec informations de debug}. Sur la vraie \texttt{StackDLL.dll} livrée (sans ces commentaires), il n'y a plus que des adresses.
+\item \point{Les classes et les templates sont \og aplatis \fg.} Il n'y a plus de \texttt{class DynamicStack<T>} dans le binaire : il y a quatre blocs de code séparés (un pour \texttt{<char>}, un pour \texttt{<int>}...), chacun avec son nom mangled. Le lien \og ces quatre fonctions viennent du même template \fg{} n'est plus qu'une convention de nommage.
+\item \point{Les optimisations changent l'ordre.} Ici on a compilé sans optimisation (\texttt{/Od} implicite), donc le code colle presque ligne à ligne au source. Avec \texttt{/O2}, le compilateur aurait pu fusionner, réordonner, ou carrément supprimer certaines instructions -- la correspondance 1 pour 1 avec le \texttt{.cpp} disparaît.
 \end{itemize}
 
-\subsection{Outils existants pour cette tâche}
+Pour aller plus loin que notre lecture manuelle, il existe des \point{désassembleurs} (\texttt{objdump -d}, \texttt{dumpbin /disasm}, qui font ce qu'on a fait à la main) et des \point{décompilateurs} (Ghidra, IDA) qui tentent de remonter jusqu'à un pseudo-code C lisible -- mais même ces outils ne retrouvent jamais les noms d'origine ni la mise en forme exacte du code source : ils produisent une approximation plausible, à relire et renommer soi-même.
 
-\begin{itemize}
-    \item \textbf{Désassembleurs} (binaire $\rightarrow$ assembleur) : \texttt{dumpbin /disasm}, \texttt{objdump -d}.
-    \item \textbf{Décompilateurs} (binaire $\rightarrow$ pseudo-code C approximatif) : Ghidra, IDA Pro, Hex-Rays. Ils produisent un code \textbf{plausible et fonctionnellement proche}, jamais identique au source original, et nécessitent toujours une relecture humaine pour renommer les variables et retrouver le sens métier.
-\end{itemize}
+\section{Le blocage \og Device Guard \fg{} : notre vrai problème du TP}
+\label{sec:deviceguard}
 
-\textbf{Conclusion sur ce point} : la compilation est une transformation \textbf{à sens unique avec perte d'information}. On peut remonter vers une approximation du comportement, jamais vers le code source exact.
+Ce point n'est pas théorique : c'est ce qui nous a bloqués pendant une bonne partie du TP, et ça vaut la peine d'être expliqué clairement.
 
-% =====================================================
-\section{Édition de liens : au-delà de la théorie}
-% =====================================================
+En essayant de compiler avec MinGW (\texttt{g++}), la compilation semblait échouer sans aucun message d'erreur (code de sortie 1, sortie vide). En creusant avec \texttt{g++ -v}, on a vu que ça plantait précisément à l'étape d'\point{assemblage}, à l'appel de \texttt{as.exe}. En l'appelant directement, le vrai message est apparu :
+\begin{lstlisting}
+Program 'as.exe' failed to run: An Application Control policy
+has blocked this file
+\end{lstlisting}
+Et plus tard, même après avoir tout recompilé proprement avec MSVC (\texttt{cl.exe}, qui lui fonctionnait sans problème), on a retrouvé exactement le même blocage en essayant de \textbf{lancer} \texttt{main.exe} :
+\begin{lstlisting}
+'...main.exe' was blocked by your organization's Device Guard policy.
+Contact your support person for more info.
+\end{lstlisting}
 
-\subsection{Deux formes de liaison dynamique}
+\point{Ce que ça veut dire.} \textbf{Device Guard} (ou WDAC, \textit{Windows Defender Application Control}) est une politique de sécurité imposée au niveau de la machine (ici par l'école), qui n'autorise que des exécutables signés ou explicitement approuvés à s'exécuter. Ce n'est \textbf{ni} une erreur de notre code, \textbf{ni} une erreur de compilation : \texttt{main.exe} et \texttt{StackDLL.dll} sont parfaitement valides (on l'a vérifié avec \texttt{dumpbin /exports}, les 38 symboles sont bien là) -- c'est le \textbf{lancement} du binaire qui est interdit par une règle qui ne regarde même pas le contenu du fichier, seulement sa provenance (signature, chemin, éditeur).
 
-\begin{enumerate}
-    \item \textbf{Liaison dynamique au chargement (\textit{load-time linking})} : c'est le mécanisme utilisé dans ce TP. Le \texttt{.lib} d'importation inscrit dans l'exécutable le nom de la DLL requise ; le système d'exploitation la charge \textbf{automatiquement} au lancement du programme, avant même l'exécution de \texttt{main()}. Si la DLL est absente, le programme refuse de démarrer (erreur \og DLL introuvable \fg).
-    \item \textbf{Liaison dynamique explicite (\textit{run-time linking})} : le programme appelle lui-même \texttt{LoadLibrary()} puis \texttt{GetProcAddress()} pour charger la DLL et résoudre un symbole \textbf{au moment choisi par le programmeur}, ce qui permet par exemple de charger des \og plugins \fg{} optionnels sans faire échouer le programme si un module est absent. Ce mécanisme n'est pas utilisé dans ce TP mais mérite d'être cité en contrôle.
-\end{enumerate}
+\point{Pourquoi c'est intéressant à savoir.} Ça illustre une distinction qu'on a tendance à oublier : \og le programme compile et se lie correctement \fg{} et \og le programme peut s'exécuter sur cette machine \fg{} sont deux questions complètement indépendantes. La chaîne de compilation (préprocesseur $\to$ compilateur $\to$ assembleur $\to$ éditeur de liens) peut réussir à 100~\%, et le système d'exploitation peut quand même refuser de lancer le résultat, pour une raison qui n'a rien à voir avec le code.
 
-\subsection{Ce que fait réellement l'éditeur de liens}
+\section{Questions qu'on pourrait me poser}
 
-L'éditeur de liens ne \og compile \fg{} rien : il ne fait que résoudre des \textbf{adresses}. Pour chaque symbole non résolu rencontré dans un \texttt{.obj}, il cherche sa définition :
-\begin{enumerate}
-    \item dans les autres \texttt{.obj} fournis sur la ligne de commande ;
-    \item dans les bibliothèques statiques (\texttt{.lib}) fournies ;
-    \item dans les bibliothèques d'importation (\texttt{.lib} de DLL), où il ne trouve pas le code, mais une indication \og ce symbole sera fourni par telle DLL au lancement \fg.
-\end{enumerate}
-S'il ne trouve nulle part un symbole référencé, il échoue avec une erreur \texttt{LNK2019 : symbole externe non résolu}.
+\begin{enumerate}[label=\point{Q\arabic*.}, leftmargin=*]
 
-% =====================================================
-\section{Questions de contrôle et discussion}
-% =====================================================
+\item \textbf{Pourquoi \texttt{Stack.h} contient des lignes \texttt{extern template class DynamicStack<int>;} ?}
 
-Cette section reprend, sous forme de questions-réponses, les points les plus susceptibles d'être posés à l'oral.
+Sans ça, chaque fichier \texttt{.cpp} qui utilise \texttt{DynamicStack<int>} (ici \texttt{Stack.cpp} et \texttt{main.cpp}) réinstancierait sa propre copie du code du template. \texttt{extern template} dit au compilateur \og ne réinstancie pas ici, une version existe déjà ailleurs (dans la DLL) \fg -- une seule copie du code, utilisée par tout le monde.
 
-\begin{enumerate}[label=\textbf{Q\arabic*.}, leftmargin=*]
+\item \textbf{Pourquoi on a dû encadrer ces lignes avec \texttt{\#ifndef STACKDLL\_EXPORTS} ?}
 
-\item \textbf{Pourquoi le header \texttt{Stack.h} contient-il à la fois la déclaration des classes template et des lignes \texttt{extern template class ...} ?}
+Parce qu'au premier essai, MSVC a renvoyé l'avertissement \texttt{C4910} : \og'DynamicStack<char>': '\_\_declspec(dllexport)' and 'extern' are incompatible on an explicit instantiation\fg. En clair : on ne peut pas dire en même temps \og j'exporte cette instanciation \fg{} (côté DLL) et \og cette instanciation est externe, va la chercher ailleurs \fg{} (ce que fait \texttt{extern template}) dans le même fichier. On a donc retiré ces lignes uniquement quand on compile la DLL elle-même.
 
-\textit{Réponse.} Les templates C++ sont normalement instanciés dans chaque unité de compilation qui les utilise, ce qui dupliquerait le code de \texttt{DynamicStack<int>} dans \texttt{Stack.cpp} \textbf{et} dans \texttt{main.cpp}. La ligne \texttt{extern template class DynamicStack<int>;} indique au compilateur \og ne réinstancie pas ce template ici, une instanciation existe déjà ailleurs (dans la DLL) \fg, évitant la duplication et garantissant qu'une seule version du code est utilisée (celle de la DLL).
+\item \textbf{\texttt{StackDLL.lib} contient-il le même genre de chose qu'un \texttt{.lib} statique classique ?}
 
-\item \textbf{Pourquoi fallait-il encadrer ces lignes \texttt{extern template} par \texttt{\#ifndef STACKDLL\_EXPORTS} ?}
+Non, et c'est la confusion la plus fréquente. Un \texttt{.lib} statique \og normal \fg{} contient du vrai code machine, copié ensuite dans l'exécutable. Le \texttt{.lib} généré avec une DLL (\textit{import library}) ne contient que des symboles et des indications pour l'éditeur de liens -- zéro ligne de code exécutable des piles.
 
-\textit{Réponse.} Lorsqu'on compile la DLL elle-même (\texttt{STACKDLL\_EXPORTS} défini), la classe est déclarée \texttt{\_\_declspec(dllexport)} et son instanciation explicite se trouve dans \texttt{Stack.cpp} (\texttt{template class DynamicStack<int>;}, sans \texttt{extern}). Avoir en plus \texttt{extern template class DynamicStack<int>;} (avec export) dans le header, inclus par ce même \texttt{Stack.cpp}, crée une contradiction pour le compilateur : \og exporte cette instanciation \fg{} contre \og cette instanciation est externe \fg. MSVC tolère cela avec un avertissement (\texttt{C4910}), mais il est plus propre de ne générer ces lignes \texttt{extern template} que côté client (import), pas côté DLL (export).
+\item \textbf{Que se passerait-il si on effaçait \texttt{StackDLL.dll} du dossier avant de lancer \texttt{main.exe} ?}
 
-\item \textbf{Le fichier \texttt{StackDLL.lib} contient-il le même type d'information qu'une bibliothèque statique \texttt{.lib} \og classique \fg{} ?}
+\texttt{main.exe} refuserait de démarrer, avec une erreur Windows du type \og le programme n'a pas pu démarrer car StackDLL.dll est introuvable \fg. La résolution de la DLL se fait au \textbf{lancement}, pas à la compilation : le \texttt{.exe} compile et se lie très bien sans que la DLL soit présente au moment du build sur le disque -- seul le \texttt{.lib} d'import suffit à cette étape.
 
-\textit{Réponse.} Non. Un \texttt{.lib} statique \og classique \fg{} (obtenu par exemple avec \texttt{lib.exe}) est une simple archive de plusieurs \texttt{.obj}, contenant du \textbf{code machine complet}, qui sera copié dans l'exécutable final. Le \texttt{.lib} généré en même temps qu'une DLL est un \textbf{\og import library \fg}, qui ne contient \textbf{aucun code exécutable} des fonctions de la pile : seulement des symboles et des informations permettant à l'éditeur de liens de générer les appels indirects vers la DLL.
+\item \textbf{Le blocage Device Guard aurait-il pu être évité en changeant de compilateur ?}
 
-\item \textbf{Que se passe-t-il si \texttt{StackDLL.dll} est absent du dossier au lancement de \texttt{main.exe} ?}
+Non, justement : on est passé de MinGW à MSVC précisément parce que MinGW échouait à l'assemblage, et ça a réglé ce premier problème. Mais le blocage au \textbf{lancement} de \texttt{main.exe} touche n'importe quel \texttt{.exe} non approuvé, peu importe le compilateur utilisé -- MSVC ou MinGW produisent tous les deux un binaire \og non signé \fg{} aux yeux de la politique.
 
-\textit{Réponse.} Le système d'exploitation, en tentant de résoudre les dépendances de l'exécutable au chargement, échoue à localiser la DLL (recherche dans le dossier de l'exécutable, puis dans le \texttt{PATH}, selon l'ordre de recherche Windows). L'exécutable ne démarre pas : Windows affiche une erreur du type \og Le programme n'a pas pu démarrer car StackDLL.dll est introuvable \fg. \texttt{main.exe} compile et se lie correctement, mais ne peut pas s'exécuter sans la DLL physiquement présente.
+\item \textbf{Pourquoi les noms dans \texttt{dumpbin /exports} sont-ils illisibles ?}
 
-\item \textbf{À quoi correspondent les noms \og bizarres \fg{} affichés par \texttt{dumpbin /exports} (ex. \texttt{??0?\$DynamicStack@D@@QEAA@H@Z}) ?}
-
-\textit{Réponse.} C'est le résultat de la \textbf{décoration de noms} (\textit{name mangling}) effectuée par le compilateur C++. Contrairement au C, où une fonction \texttt{push} a un seul nom binaire possible, le C++ autorise la surcharge et les templates : il faut donc encoder dans le nom binaire la classe, le type du template, les types des paramètres et le type de retour, afin que l'éditeur de liens puisse distinguer \texttt{push(const int\&)} de \texttt{push(const char\&)}.
-
-\item \textbf{Peut-on reconstruire \texttt{Stack.cpp} à partir du fichier assembleur ou du binaire \texttt{StackDLL.dll} ?}
-
-\textit{Réponse.} On peut en obtenir une \textbf{approximation fonctionnelle} (via désassemblage puis décompilation), mais pas le code source exact : les noms de variables locales, les commentaires, la structure \texttt{for}/\texttt{while} d'origine et les éventuelles optimisations faites par le compilateur (inlining, suppression de code mort, réordonnancement) ne sont pas récupérables. La compilation est une transformation irréversible au sens strict.
-
-\item \textbf{Pourquoi utiliser une DLL plutôt qu'une bibliothèque statique pour ce TP, alors que le projet est petit ?}
-
-\textit{Réponse.} D'un point de vue strictement technique pour un projet de cette taille, une bibliothèque statique suffirait largement et serait même plus simple (pas de problème de distribution de la DLL, pas de risque \og DLL introuvable \fg). L'intérêt pédagogique de la DLL est de manipuler concrètement les notions d'\textbf{interface exportée}, de \textbf{macros dllexport/dllimport}, et la distinction entre \textbf{édition de liens à la compilation} et \textbf{résolution au chargement}, qui sont des notions essentielles dès qu'un projet grandit (plugins, bibliothèques tierces, mise à jour indépendante de modules).
+C'est le \textit{name mangling} : le C++ autorise la surcharge (\texttt{push(const int\&)} et \texttt{push(const char\&)} dans la même classe template), donc le compilateur doit encoder le type de la classe et des paramètres dans le nom binaire pour que l'éditeur de liens puisse les différencier. Le C, lui, n'a pas ce problème (pas de surcharge), donc une fonction C garde son nom tel quel dans le binaire.
 
 \end{enumerate}
 
-% =====================================================
-\section{Conclusion}
-% =====================================================
+\section{En résumé}
 
-La construction d'une DLL met en lumière des aspects de la compilation C++ habituellement masqués lorsqu'on se contente de taper \texttt{g++ main.cpp -o main}. Elle oblige à distinguer clairement : le code source, le code objet, la bibliothèque d'importation, la bibliothèque dynamique elle-même, et l'exécutable final -- chacun ayant un rôle précis et un moment de production distinct dans la chaîne de compilation. Elle illustre également une limite fondamentale et irréversible du processus de compilation : l'information perdue au passage du code source au binaire ne peut être que partiellement reconstituée, jamais restituée à l'identique.
+Trois choses à retenir de ce TP, dans l'ordre où on les a rencontrées : (1) un \texttt{.obj} n'est qu'un fragment de code, pas un programme ; (2) une DLL se fabrique en trois fichiers (\texttt{.dll}, \texttt{.lib} d'import, \texttt{.exp} temporaire), et le \texttt{.lib} d'import ne contient aucun code, contrairement à ce que son extension laisse croire ; (3) même quand tout compile et se lie parfaitement, le système d'exploitation garde le dernier mot sur le droit d'exécuter le résultat -- ce qu'on a appris à nos dépens avec Device Guard.
 
 \end{document}
